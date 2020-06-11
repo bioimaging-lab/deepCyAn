@@ -1,145 +1,176 @@
-function lgraph = createUnet()
+%createUnet creates a deep learning network with the  U-net architecture.
+%
+%  lgraph = createUnet(inputTileSize) returns a U-net network which accepts
+%  images of size inputTileSize.
+%
 
-% EDIT: modify these parameters for your application.
+% Copyright 2017 The MathWorks, Inc.
+
+function lgraph = createUnet(inputTileSize)
+
+% Network parameters taken from the publication
 encoderDepth = 4;
 initialEncoderNumChannels = 64;
-inputTileSize = [2048 2048 1]; %256 by 256 by 3
-convFilterSize = [3 3];
-inputNumChannels = 1; %3
-numClasses = 2; %10
+inputNumchannels = inputTileSize(3);
+convFilterSize = 3;
+UpconvFilterSize = 2;
 
+layers = imageInputLayer(inputTileSize,...
+    'Name','ImageInputLayer');
+layerIndex = 1;
 
-inputlayer = imageInputLayer(inputTileSize,'Name','ImageInputLayer');
+% Create encoder layers
+for sections = 1:encoderDepth
+    
+    encoderNumChannels = initialEncoderNumChannels * 2^(sections-1);
+        
+    if sections == 1
+        conv1 = convolution2dLayer(convFilterSize,encoderNumChannels,...
+            'Padding',[1 1],...
+            'NumChannels',inputNumchannels,...
+            'BiasL2Factor',0,...
+            'Name',['Encoder-Section-' num2str(sections) '-Conv-1']);
+        
+        conv1.Weights = sqrt(2/((convFilterSize^2)*inputNumchannels*encoderNumChannels)) ...
+            * randn(convFilterSize,convFilterSize,inputNumchannels,encoderNumChannels);
+    else
+        conv1 = convolution2dLayer(convFilterSize,encoderNumChannels,...
+            'Padding',[1 1],...
+            'BiasL2Factor',0,...
+            'Name',['Encoder-Section-' num2str(sections) '-Conv-1']);
+        
+        conv1.Weights = sqrt(2/((convFilterSize^2)*encoderNumChannels/2*encoderNumChannels)) ...
+            * randn(convFilterSize,convFilterSize,encoderNumChannels/2,encoderNumChannels);
+    end
+    
+    conv1.Bias = randn(1,1,encoderNumChannels)*0.00001 + 1;
+    
+    relu1 = reluLayer('Name',['Encoder-Section-' num2str(sections) '-ReLU-1']);
+    
+    conv2 = convolution2dLayer(convFilterSize,encoderNumChannels,...
+        'Padding',[1 1],...
+        'BiasL2Factor',0,...
+        'Name',['Encoder-Section-' num2str(sections) '-Conv-2']);
+    
+    conv2.Weights = sqrt(2/((convFilterSize^2)*encoderNumChannels)) ...
+        * randn(convFilterSize,convFilterSize,encoderNumChannels,encoderNumChannels);
+    conv2.Bias = randn(1,1,encoderNumChannels)*0.00001 + 1;
+    
+    relu2 = reluLayer('Name',['Encoder-Section-' num2str(sections) '-ReLU-2']);
+       
+    layers = [layers; conv1; relu1; conv2; relu2];     %#ok<*AGROW>
+    layerIndex = layerIndex + 4;
+    
+    if sections == encoderDepth
+        dropOutLayer = dropoutLayer(0.5,'Name',['Encoder-Section-' num2str(sections) '-DropOut']);
+        layers = [layers; dropOutLayer];
+        layerIndex = layerIndex +1;
+    end
+    
+    maxPoolLayer = maxPooling2dLayer(2, 'Stride', 2, 'Name',['Encoder-Section-' num2str(sections) '-MaxPool']);
+    
+    layers = [layers; maxPoolLayer];
+    layerIndex = layerIndex +1;
+    
+end
+%Create mid layers
+conv1 = convolution2dLayer(convFilterSize,2*encoderNumChannels,...
+    'Padding',[1 1],...
+    'BiasL2Factor',0,...
+    'Name','Mid-Conv-1');
 
-[encoder, finalNumChannels] = iCreateEncoder(encoderDepth, convFilterSize, initialEncoderNumChannels, inputNumChannels);
+conv1.Weights = sqrt(2/((convFilterSize^2)*2*encoderNumChannels)) ...
+    * randn(convFilterSize,convFilterSize,encoderNumChannels,2*encoderNumChannels);
+conv1.Bias = randn(1,1,2*encoderNumChannels)*0.00001 + 1;
 
-firstConv = createAndInitializeConvLayer(convFilterSize, finalNumChannels, ...
-    2*finalNumChannels, 'Bridge-Conv-1');
-firstReLU = reluLayer('Name','Bridge-ReLU-1');
+relu1 = reluLayer('Name','Mid-ReLU-1');
 
-secondConv = createAndInitializeConvLayer(convFilterSize, 2*finalNumChannels, ...
-    2*finalNumChannels, 'Bridge-Conv-2');
-secondReLU = reluLayer('Name','Bridge-ReLU-2');
+conv2 = convolution2dLayer(convFilterSize,2*encoderNumChannels,...
+    'Padding',[1 1],...
+    'BiasL2Factor',0,...
+    'Name','Mid-Conv-2');
 
-encoderDecoderBridge = [firstConv; firstReLU; secondConv; secondReLU];
+conv2.Weights = sqrt(2/((convFilterSize^2)*2*encoderNumChannels)) ...
+    * randn(convFilterSize,convFilterSize,2*encoderNumChannels,2*encoderNumChannels);
+conv2.Bias = zeros(1,1,2*encoderNumChannels)*0.00001 + 1;
 
-dropOutLayer = dropoutLayer(0.5,'Name','Bridge-DropOut');
-encoderDecoderBridge = [encoderDecoderBridge; dropOutLayer];
+relu2 = reluLayer('Name','Mid-ReLU-2');
+layers = [layers; conv1; relu1; conv2; relu2];
+layerIndex = layerIndex + 4;
 
-initialDecoderNumChannels = finalNumChannels;
+% Add drop out Layer
+dropOutLayer = dropoutLayer(0.5,'Name','Mid-DropOut');
 
-upConvFilterSize = 2;
+layers = [layers; dropOutLayer];
+layerIndex = layerIndex + 1;
 
-[decoder, finalDecoderNumChannels] = iCreateDecoder(encoderDepth, upConvFilterSize, convFilterSize, initialDecoderNumChannels);
+initialDecoderNumChannels = encoderNumChannels;
 
-layers = [inputlayer; encoder; encoderDecoderBridge; decoder];
+%Create decoder layers
+for sections = 1:encoderDepth
+    
+    decoderNumChannels = initialDecoderNumChannels / 2^(sections-1);
+    
+    upConv = transposedConv2dLayer(UpconvFilterSize, decoderNumChannels,...
+        'Stride',2,...
+        'BiasL2Factor',0,...
+        'Name',['Decoder-Section-' num2str(sections) '-UpConv']);
 
+    upConv.Weights = sqrt(2/((UpconvFilterSize^2)*2*decoderNumChannels)) ...
+        * randn(UpconvFilterSize,UpconvFilterSize,decoderNumChannels,2*decoderNumChannels);
+    upConv.Bias = randn(1,1,decoderNumChannels)*0.00001 + 1;    
+    
+    upReLU = reluLayer('Name',['Decoder-Section-' num2str(sections) '-UpReLU']);
+    
+    depthConcatLayer = depthConcatenationLayer(2,'Name',...
+        ['Decoder-Section-' num2str(sections) '-DepthConcatenation']);
+    
+    conv1 = convolution2dLayer(convFilterSize,decoderNumChannels,...
+        'Padding',[1 1],...
+        'BiasL2Factor',0,...
+        'Name',['Decoder-Section-' num2str(sections) '-Conv-1']);
+    
+    conv1.Weights = sqrt(2/((convFilterSize^2)*2*decoderNumChannels)) ...
+        * randn(convFilterSize,convFilterSize,2*decoderNumChannels,decoderNumChannels);
+    conv1.Bias = randn(1,1,decoderNumChannels)*0.00001 + 1;
+    
+    relu1 = reluLayer('Name',['Decoder-Section-' num2str(sections) '-ReLU-1']);
+    
+    conv2 = convolution2dLayer(convFilterSize,decoderNumChannels,...
+        'Padding',[1 1],...
+        'BiasL2Factor',0,...
+        'Name',['Decoder-Section-' num2str(sections) '-Conv-2']);
+    
+    conv2.Weights = sqrt(2/((convFilterSize^2)*decoderNumChannels)) ...
+        * randn(convFilterSize,convFilterSize,decoderNumChannels,decoderNumChannels);
+    conv2.Bias = randn(1,1,decoderNumChannels)*0.00001 + 1;
+    
+    relu2 = reluLayer('Name',['Decoder-Section-' num2str(sections) '-ReLU-2']);
+    
+    layers = [layers; upConv; upReLU; depthConcatLayer; conv1; relu1; conv2; relu2];
+    
+    layerIndex = layerIndex + 7;
+end
 
-finalConv = convolution2dLayer(1,numClasses,...
+finalConv = convolution2dLayer(1,2,...
     'BiasL2Factor',0,...
     'Name','Final-ConvolutionLayer');
-finalConv.Weights = randn(1,1,finalDecoderNumChannels,numClasses);
-finalConv.Bias = zeros(1,1,numClasses);
+
+finalConv.Weights = randn(1,1,decoderNumChannels,2);
+finalConv.Bias = randn(1,1,2)*0.00001 + 1;
 
 smLayer = softmaxLayer('Name','Softmax-Layer');
-pixelClassLayer = pixelClassificationLayer('Name','Segmentation-Layer');
+
+pixelClassLayer = pixelClassificationLayer('Name','Segmentation-Layer'); %, 'ClassNames', classesTbl.Name, 'ClassWeights', classWeights);
 
 layers = [layers; finalConv; smLayer; pixelClassLayer];
 
+% Create the layer graph and create connections in the graph
 lgraph = layerGraph(layers);
 
-for depth = 1:encoderDepth
-   startLayer = sprintf('Encoder-Stage-%d-ReLU-2',depth); 
-   endLayer = sprintf('Decoder-Stage-%d-DepthConcatenation/in2',encoderDepth-depth + 1);
-   lgraph = connectLayers(lgraph,startLayer, endLayer);
-end
-
-end
-
-%--------------------------------------------------------------------------
-function [encoder, finalNumChannels] = iCreateEncoder(encoderDepth, convFilterSize, initialEncoderNumChannels, inputNumChannels)
-
-encoder = [];
-for stage = 1:encoderDepth
-    % Double the layer number of channels at each stage of the encoder.
-    encoderNumChannels = initialEncoderNumChannels * 2^(stage-1);
-    
-    if stage == 1
-        firstConv = createAndInitializeConvLayer(convFilterSize, inputNumChannels, encoderNumChannels, ['Encoder-Stage-' num2str(stage) '-Conv-1']);
-    else
-        firstConv = createAndInitializeConvLayer(convFilterSize, encoderNumChannels/2, encoderNumChannels, ['Encoder-Stage-' num2str(stage) '-Conv-1']);
-    end
-    firstReLU = reluLayer('Name',['Encoder-Stage-' num2str(stage) '-ReLU-1']);
-    
-    secondConv = createAndInitializeConvLayer(convFilterSize, encoderNumChannels, encoderNumChannels, ['Encoder-Stage-' num2str(stage) '-Conv-2']);
-    secondReLU = reluLayer('Name',['Encoder-Stage-' num2str(stage) '-ReLU-2']);
-    
-    encoder = [encoder;firstConv; firstReLU; secondConv; secondReLU];
-    
-    if stage == encoderDepth
-        dropOutLayer = dropoutLayer(0.5,'Name',['Encoder-Stage-' num2str(stage) '-DropOut']);
-        encoder = [encoder; dropOutLayer];
-    end
-    
-    maxPoolLayer = maxPooling2dLayer(2, 'Stride', 2, 'Name',['Encoder-Stage-' num2str(stage) '-MaxPool']);
-    
-    encoder = [encoder; maxPoolLayer];
-end
-finalNumChannels = encoderNumChannels;
-end
-
-%--------------------------------------------------------------------------
-function [decoder, finalDecoderNumChannels] = iCreateDecoder(encoderDepth, upConvFilterSize, convFilterSize, initialDecoderNumChannels)
-
-decoder = [];
-for stage = 1:encoderDepth    
-    % Half the layer number of channels at each stage of the decoder.
-    decoderNumChannels = initialDecoderNumChannels / 2^(stage-1);
-    
-    upConv = createAndInitializeUpConvLayer(upConvFilterSize, 2*decoderNumChannels, decoderNumChannels, ['Decoder-Stage-' num2str(stage) '-UpConv']);
-    upReLU = reluLayer('Name',['Decoder-Stage-' num2str(stage) '-UpReLU']);
-    
-    % Input feature channels are concatenated with deconvolved features within the decoder.
-    depthConcatLayer = depthConcatenationLayer(2, 'Name', ['Decoder-Stage-' num2str(stage) '-DepthConcatenation']);
-    
-    firstConv = createAndInitializeConvLayer(convFilterSize, 2*decoderNumChannels, decoderNumChannels, ['Decoder-Stage-' num2str(stage) '-Conv-1']);
-    firstReLU = reluLayer('Name',['Decoder-Stage-' num2str(stage) '-ReLU-1']);
-    
-    secondConv = createAndInitializeConvLayer(convFilterSize, decoderNumChannels, decoderNumChannels, ['Decoder-Stage-' num2str(stage) '-Conv-2']);
-    secondReLU = reluLayer('Name',['Decoder-Stage-' num2str(stage) '-ReLU-2']);
-    
-    decoder = [decoder; upConv; upReLU; depthConcatLayer; firstConv; firstReLU; secondConv; secondReLU];
-end
-finalDecoderNumChannels = decoderNumChannels;
-end
-
-%--------------------------------------------------------------------------
-function convLayer = createAndInitializeConvLayer(convFilterSize, inputNumChannels, outputNumChannels, layerName)
-
-convLayer = convolution2dLayer(convFilterSize,outputNumChannels,...
-    'Padding', 'same',...
-    'BiasL2Factor',0,...
-    'Name',layerName);
-
-% He initialization is used
-convLayer.Weights = sqrt(2/((convFilterSize(1)*convFilterSize(2))*inputNumChannels)) ...
-    * randn(convFilterSize(1),convFilterSize(2), inputNumChannels, outputNumChannels);
-
-convLayer.Bias = zeros(1,1,outputNumChannels);
-convLayer.BiasLearnRateFactor = 2;
-end
-
-%--------------------------------------------------------------------------
-function upConvLayer = createAndInitializeUpConvLayer(UpconvFilterSize, inputNumChannels, outputNumChannels, layerName)
-
-upConvLayer = transposedConv2dLayer(UpconvFilterSize, outputNumChannels,...
-    'Stride',2,...
-    'BiasL2Factor',0,...
-    'Name',layerName);
-
-% The transposed conv filter size is a scalar
-upConvLayer.Weights = sqrt(2/((UpconvFilterSize^2)*inputNumChannels)) ...
-    * randn(UpconvFilterSize,UpconvFilterSize,outputNumChannels,inputNumChannels);
-upConvLayer.Bias = zeros(1,1,outputNumChannels);
-upConvLayer.BiasLearnRateFactor = 2;
+% Connect concatenation layers
+lgraph = connectLayers(lgraph, 'Encoder-Section-1-ReLU-2','Decoder-Section-4-DepthConcatenation/in2');
+lgraph = connectLayers(lgraph, 'Encoder-Section-2-ReLU-2','Decoder-Section-3-DepthConcatenation/in2');
+lgraph = connectLayers(lgraph, 'Encoder-Section-3-ReLU-2','Decoder-Section-2-DepthConcatenation/in2');
+lgraph = connectLayers(lgraph, 'Encoder-Section-4-DropOut','Decoder-Section-1-DepthConcatenation/in2');
 end
