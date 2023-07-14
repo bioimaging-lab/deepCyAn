@@ -1,26 +1,39 @@
 clearvars
 clc
 
-file = 'C:\Users\jianw\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\OD0d1\OD0d1_image001.nd2';
+%List of folders
+folders = {'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\OD0d1', ...
+    'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\OD0d2', ...
+    'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\OD0d4', ...
+    'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\20230621_140748_081'};
 
-reader = BioformatsImage(file);
+outputFolder = 'D:\Projects\Research\2023-kolya-MLcyano\exported';
 
-%%
-for iS = 1:2%reader.seriesCount
+for iFolder = 1:numel(folders)
 
-    reader.series = iS;
+    files = dir(fullfile(folders{iFolder}, '*.nd2'));
 
+    for iFile = 1:numel(files)
+        fprintf(['Processing file ', files(iFile).name, '\n'])
 
-    ImOrange = getPlane(reader, 1, '555-mOrange', 1);
-    IBF = getPlane(reader, 1, 'Red', 1);
+        reader = BioformatsImage(fullfile(files(iFile).folder, files(iFile).name));
 
-    imshow(ImOrange, [])
+        for iS = 1:reader.seriesCount
 
-    mask = segmentCells(ImOrange);
+            reader.series = iS;
 
-    exportImages(IBF, mask, 'C:\Users\jianw\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\exported', 256, ...
-        'EdgeHandler', 'ignore', 'SplitNoCells', true);
+            for iT = 1:reader.sizeT
 
+                ImOrange = getPlane(reader, 1, '555-mOrange', iT);
+                IBF = getPlane(reader, 1, 'Red', iT);
+
+                mask = segmentCells(ImOrange);
+
+                exportImages(IBF, mask, outputFolder, 256, ...
+                    'EdgeHandler', 'ignore', 'SplitNoCells', true);
+            end
+
+        end
+
+    end
 end
-
-

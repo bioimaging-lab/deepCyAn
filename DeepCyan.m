@@ -1,32 +1,17 @@
-%% Compute the weight map from the mask
+clearvars
+clc
 
-% [weight]=unetwmap(resizedMask,10,25);
+imageFolder = 'D:\Projects\Research\2023-kolya-MLcyano\exported\images';
+labelsFolder = 'D:\Projects\Research\2023-kolya-MLcyano\exported\labels';
 
 %% Load the images into datastores
-
-trainingDir = 'D:\Nick\images\trainingOutput';
-
-%Load training images into a dataStore
-tImgList = dir(fullfile(trainingDir, 'image*.tif'));
-tImgListCell = cell(1, numel(tImgList));
-for iFile = 1:numel(tImgList)
-    tImgListCell{iFile} = fullfile(trainingDir, tImgList(iFile).name);
-end
-
-imds = imageDatastore(tImgListCell);
+imds = imageDatastore(imageFolder);
 
 %Load masks into a label datastore
 classNames = ["Background" "Cell"];
-pixelLabelID = [0, 255];
+pixelLabelID = [0, 1];
 
-tMaskList = dir(fullfile(trainingDir, 'mask*.png'));
-tMaskListCell = cell(1, numel(tMaskList));
-for iFile = 1:numel(tMaskList)
-    tMaskListCell{iFile} = fullfile(trainingDir, tMaskList(iFile).name);
-end
-
-pxds = pixelLabelDatastore(tMaskListCell, classNames, pixelLabelID);
-
+pxds = pixelLabelDatastore(labelsFolder, classNames, pixelLabelID);
 
 %Sanity check
 I = readimage(imds, 1);
@@ -51,13 +36,12 @@ frequency = tbl.PixelCount/sum(tbl.PixelCount);
 %Partition data into training, validation, and test sets
 [imdsTrain, imdsVal, imdsTest, pxdsTrain, pxdsVal, pxdsTest] = partitionData(imds, pxds);
 
-
 %For testing with class weights
 imageFreq = tbl.PixelCount ./ tbl.ImagePixelCount;
 classWeights = median(imageFreq) ./ imageFreq;
 
 %Create a U-net
-lgraphU = createUnet([256, 256, 1]);
+lgraph = unetLayers([256 256], 2);
 
 % %Modify the final segmentation layer. This custom layer includes a custom
 % %loss function that takes into account custom pixel weights.
@@ -77,16 +61,16 @@ options = trainingOptions('sgdm', ...
     'LearnRateDropPeriod',10,...
     'LearnRateDropFactor',0.3,...
     'Momentum',0.90, ...
-    'InitialLearnRate',0.00001, ...
+    'InitialLearnRate',1e-3, ...
     'L2Regularization',0.005, ...
     'ValidationData',pximdsVal,...
     'MaxEpochs',30, ...  
     'MiniBatchSize',1, ...
     'Shuffle','every-epoch', ...
     'CheckpointPath', '', ...
-    'VerboseFrequency',2,...
+    'VerboseFrequency',10,...
     'Plots','training-progress',...
-    'ExecutionEnvironment', 'cpu', ...
+    'ExecutionEnvironment', 'gpu', ...
     'ValidationPatience', 4);
 
 
@@ -99,7 +83,13 @@ pximds = pixelLabelImageDatastore(imdsTrain,pxdsTrain, ...
     'DataAugmentation',augmenter);
 
 %Do the actual training
-[net, info] = trainNetwork(pximds,lgraphU,options);
+[net, info] = trainNetwork(pximds,lgraph,options);
+
+%% Save the network
+
+outputFN = [char(datetime('now', 'Format', 'yyyyMMdd-HHmmss')), '-DeepCyan-Unet.mat'];
+
+save(outputFN, 'net', 'info', 'options', 'lgraph')
 
 %% Testing
 
