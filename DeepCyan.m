@@ -62,7 +62,7 @@ lgraph = unetLayers([256 256], 2);
 lgraph = removeLayers(lgraph, 'Segmentation-Layer');
 
 newSegLayer = pixelClassificationLayer('Classes', ["Background", "Cell"], ...
-    'ClassWeights', [20, 0.5]);
+    'ClassWeights', [0.5, 20]);
 
 lgraph = addLayers(lgraph, newSegLayer);
 
