@@ -29,7 +29,7 @@ imdsTest = imageDatastore(testImages);
 
 % Extract class and label IDs info.
 classes = pxds.ClassNames;
-labelIDs = [0 255];
+labelIDs = [0 1];
 
 % Create pixel label datastores for training and test.
 trainingLabels = pxds.Files(trainingIdx);
