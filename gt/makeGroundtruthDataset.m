@@ -45,7 +45,7 @@ for iFolder = 1:numel(inputDirs)
                 mask = segmentCells(ImOrange);
 
                 %Crop subimages and export as TIFs
-                exportImages(IBF, mask, outputFolder, 256, ...
+                exportImages(IBF, mask, outputDir, 256, ...
                     'EdgeHandler', 'ignore', 'SplitNoCells', true);
 
             end

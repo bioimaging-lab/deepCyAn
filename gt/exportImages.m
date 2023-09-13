@@ -159,15 +159,50 @@ for iRow = 1:numel(indRowStart)
 
         end
 
-        imwrite(I(indRowStart(iRow):indRowEnd, ...
-            indColStart(iCol):indColEnd), ...
+        currImg = I(indRowStart(iRow):indRowEnd, ...
+            indColStart(iCol):indColEnd);
+        currMask = mask(indRowStart(iRow):indRowEnd, ...
+            indColStart(iCol):indColEnd);
+
+        imwrite(currImg, ...
             fullfile(outputDir, imagesSubDir, [int2str(ctrImage), '.tif']), ...
             'Compression', 'none')
 
-        imwrite(mask(indRowStart(iRow):indRowEnd, ...
-            indColStart(iCol):indColEnd), ...
+        imwrite(currMask, ...
             fullfile(outputDir, labelsSubDir, [int2str(ctrImage), '.tif']), ...
-            'Compression', 'none')        
+            'Compression', 'none')
+
+        %https://www.mathworks.com/matlabcentral/answers/350406-how-do-i-read-large-set-of-multi-page-tiff-files-into-tall-array-using-a-datastore
+        %Identify individual cells for Mask-RCNN
+        celldata = regionprops(currMask, 'BoundingBox', 'PixelIdxList');
+
+        if ~exist(fullfile(outputDir, 'maskrcnn'), 'dir')
+            mkdir(fullfile(outputDir, 'maskrcnn'))
+        end
+
+        for iCell = 1:numel(celldata)
+            
+            currCellMask = false(size(currMask));
+            currCellMask(celldata(iCell).PixelIdxList) = true;
+
+            if iCell == 1
+                imwrite(currCellMask, ...
+                    fullfile(outputDir, 'maskrcnn', [int2str(ctrImage), '.tif']), ...
+                    'Compression', 'none')
+
+            else
+                imwrite(currCellMask, ...
+                    fullfile(outputDir, 'maskrcnn', [int2str(ctrImage), '.tif']), ...
+                    'Compression', 'none', 'writeMode', 'append')
+            end
+
+        end
+
+        tblBoundingBox = table;
+        tblBoundingBox.Cell = cat(1, celldata.BoundingBox);
+        save(fullfile(outputDir, 'maskrcnn', [int2str(ctrImage), '.mat']), ...
+            'tblBoundingBox');
+        
 
         ctrImage = ctrImage + 1;
    
