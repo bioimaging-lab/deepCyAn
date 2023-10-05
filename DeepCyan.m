@@ -1,8 +1,10 @@
 clearvars
 clc
 
-imageFolder = 'D:\Projects\Research\2023-kolya-MLcyano\exported\images';
-labelsFolder = 'D:\Projects\Research\2023-kolya-MLcyano\exported\labels';
+imageFolder = 'D:\Projects\Research\deepCyan\data\images';
+labelsFolder = 'D:\Projects\Research\deepCyan\data\labels';
+
+outputFolder = 'D:\Projects\Research\deepCyan\trained';
 
 %% Load the images into datastores
 imds = imageDatastore(imageFolder);
@@ -41,8 +43,7 @@ pximdsVal = pixelLabelImageDatastore(imdsVal,pxdsVal);
 %For training set, perform simple augmentation to increase training data
 augmenter = imageDataAugmenter('RandXReflection',true, ...
     'RandYReflection',true, ...
-    'RandXTranslation',[-10 10], 'RandYTranslation',[-10 10],...
-    'RandRotation', [-90 90]);
+    'RandXTranslation',[-10 10], 'RandYTranslation',[-10 10]);
 
 %Apply the data augmentation
 pximds = pixelLabelImageDatastore(imdsTrain,pxdsTrain, ...
@@ -77,7 +78,7 @@ options = trainingOptions('sgdm', ...
     'L2Regularization',0.005, ...
     'ValidationData',pximdsVal,...
     'MaxEpochs',30, ...  
-    'MiniBatchSize',10, ...
+    'MiniBatchSize',1, ...
     'Shuffle','every-epoch', ...
     'CheckpointPath', '', ...
     'VerboseFrequency',10,...
@@ -92,25 +93,66 @@ options = trainingOptions('sgdm', ...
 
 outputFN = [char(datetime('now', 'Format', 'yyyyMMdd-HHmmss')), '-DeepCyan-Unet.mat'];
 
-save(outputFN, 'net', 'info', 'options', 'lgraph')
+save(fullfile(outputFolder, outputFN), 'net', 'info', 'options', 'lgraph')
 
-%% Final sanity checvk
+%% Final sanity check
 
-imgInd = 64;
-
-I = readimage(imdsVal, imgInd);
-C = semanticseg(I, net);
-
-E = readimage(pxdsVal, imgInd);
+imgInd = [5, 36, 151];
 
 figure;
-subplot(1, 2, 1)
-B = labeloverlay(I, C);
-imshow(B)
-title('Predicted')
+for ii = 1:numel(imgInd)
 
-subplot(1, 2, 2)
-B = labeloverlay(I, E);
-imshow(B)
-title('Expected')
+    fn = imdsVal.Files{imgInd(ii)};
+    [~, fn] = fileparts(fn);
 
+    I = readimage(imdsTrain, imgInd(ii));
+    C = semanticseg(I, net);
+
+    E = readimage(pxdsTrain, imgInd(ii));
+    
+    subplot(3, 2, ((ii - 1) * 2) + 1)
+    B = labeloverlay(I, C);
+    imshow(B)
+    title(['Predicted (', fn, '.tif)'])
+
+    subplot(3, 2, ii * 2)
+    B = labeloverlay(I, E);
+    imshow(B)
+    title('Expected')
+
+end
+sgtitle('Training set')
+set(gcf, 'Position', [102 2 836 948])
+
+saveas(gcf, fullfile(outputFolder, [char(datetime('now', 'Format', 'yyyyMMdd-HHmmss')), '-DeepCyan-Unet-Training.png']))
+
+%% Check validation set
+
+imgInd = [64, 115, 89];
+
+figure;
+for ii = 1:numel(imgInd)
+
+    fn = imdsVal.Files{imgInd(ii)};
+    [~, fn] = fileparts(fn);
+
+    I = readimage(imdsVal, imgInd(ii));
+    C = semanticseg(I, net);
+
+    E = readimage(pxdsVal, imgInd(ii));
+    
+    subplot(3, 2, ((ii - 1) * 2) + 1)
+    B = labeloverlay(I, C);
+    imshow(B)
+    title(['Predicted (', fn, '.tif)'])
+
+    subplot(3, 2, ii * 2)
+    B = labeloverlay(I, E);
+    imshow(B)
+    title('Expected')
+
+end
+sgtitle('Validation set')
+set(gcf, 'Position', [102 2 836 948])
+
+saveas(gcf, fullfile(outputFolder, [char(datetime('now', 'Format', 'yyyyMMdd-HHmmss')), '-DeepCyan-Unet-Validation.png']))
