@@ -1,4 +1,4 @@
-function mask = segmentCellsV2(I)
+function mask = segmentCellsV2(I, sensitivity)
 %SEGMENTCELLS  Generate a mask of fluorescently labeled cyanobacteria
 %
 %  MASK = SEGMENTCELLS(I) will return a binary matrix MASK which labels the
@@ -10,7 +10,15 @@ function mask = segmentCellsV2(I)
 % T = adaptthresh(I, 0.8, 'NeighborhoodSize', 41);
 % mask = imbinarize(I, T);
 
-th = getThreshold(I, 0.01);
+%Normalize the image
+I = double(I);
+
+I = (I - min(I(:)))/(max(I(:)) - min(I(:)));
+I = uint16(I * 65535);
+
+I = imsharpen(I, 'Amount', 0.9);
+
+th = getThreshold(I, sensitivity);
 mask = I > th;
 
 mask = imopen(mask, strel('disk', 3));
@@ -31,8 +39,23 @@ mask = imopen(mask, strel('disk', 3));
 % dd = imhmin(dd, 1);
 % LL = watershed(dd);
 
-markers = imregionalmax(Ifilt);
+markers = imregionalmax(Ifilt, 8);
 markers(~mask) = false;
+
+markers = imdilate(markers,strel('disk', 6));
+markers = imerode(markers,strel('disk', 3));
+
+% %Remove regions which are too dark
+% rptemp = regionprops(markers, I,'MeanIntensity','PixelIdxList');
+% markerTh = median([rptemp.MeanIntensity]) - 0.2 * median([rptemp.MeanIntensity]);
+% 
+% idxToDelete = 1:numel(rptemp);
+% idxToDelete([rptemp.MeanIntensity] > markerTh) = [];
+% 
+% for ii = idxToDelete
+%     markers(rptemp(ii).PixelIdxList) = 0;
+% end
+
 % 
 % figure;
 % imshowpair(I, markers);
@@ -51,7 +74,7 @@ mask(LL == 0) = 0;
 %Remove objects which are too small to be a real cell
 mask = bwareaopen(mask, 100);
 
-imshowpair(I, bwperim(mask));
+% imshowpair(I, bwperim(mask));
 
 %Grow the remaining masks without allowing objects to touch. This is
 %require because the mOrange marker labels the cytoplasm, which is smaller

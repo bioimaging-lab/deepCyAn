@@ -19,7 +19,7 @@ nCnts = smooth(nCnts,5);
 [bgCnt,bgLoc] = findpeaks(nCnts,'Npeaks',1,'SortStr','descend');
 
 %Find where the histogram counts drops to at least 20% of this value
-thLoc = find(nCnts(bgLoc:end) <= bgCnt * sensitivity, 1, 'first');
+thLoc = find(nCnts(bgLoc:end) <= (bgCnt * sensitivity), 1, 'first');
 
 if isempty(thLoc)
     error('FRETtracker:getThreshold:CouldNotGetThreshold',...
@@ -28,8 +28,11 @@ end
 
 thLvl = binCenters(thLoc + bgLoc);
 
-%             plot(binCenters,nCnts,binCenters(bgLoc),bgCnt,'x',[thLvl, thLvl],ylim,'r--');
-%             keyboard
+plot(binCenters,nCnts,binCenters(bgLoc),bgCnt,'x',[thLvl, thLvl],ylim,'r--');
+
+keyboard
+
+% keyboard
 %
 %
 
