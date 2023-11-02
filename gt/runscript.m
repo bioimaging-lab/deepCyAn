@@ -9,7 +9,7 @@ folders = {'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segme
     'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\OD0d4', ...
     'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\data\20230621 scJC0201\20230621_140748_081'};
 
-outputFolder = 'D:\Projects\Research\deepCyan\data\masks';
+outputFolder = 'C:\Users\Jian Tay\OneDrive - UCB-O365\Projects\2023 Unet Cyano Segmentation\exported';
 
 if ~exist(outputFolder, 'dir')
     mkdir(outputFolder);
@@ -37,11 +37,11 @@ for iFolder = 1:numel(folders)
 
                 %Export the mask and brightfield file as a TIFF stack
                 if iT == 1
-                    imwrite(IBF, fullfile(outputFolder, [files(iFile).name, '_BF.tif']))
-                    imwrite(mask, fullfile(outputFolder, [files(iFile).name, '_mask.tif']), 'Compression', 'none')
+                    imwrite(IBF, fullfile(outputFolder, [files(iFile).name, '_T', int2str(iT), '_S', int2str(reader.series), '_BF.tif']))
+                    imwrite(mask, fullfile(outputFolder, [files(iFile).name, '_T', int2str(iT), '_S', int2str(reader.series), '_mask.tif']), 'Compression', 'none')
                 else
-                    imwrite(IBF, fullfile(outputFolder, [files(iFile).name, '_BF.tif']), 'writeMode', 'append')
-                    imwrite(mask, fullfile(outputFolder, [files(iFile).name, '_mask.tif']), 'Compression', 'none', 'writeMode', 'append')
+                    imwrite(IBF, fullfile(outputFolder, [files(iFile).name, '_T', int2str(iT), '_S', int2str(reader.series), '_BF.tif']), 'writeMode', 'append')
+                    imwrite(mask, fullfile(outputFolder, [files(iFile).name, '_T', int2str(iT), '_S', int2str(reader.series), '_mask.tif']), 'Compression', 'none', 'writeMode', 'append')
                 end
 
                 % exportImages(IBF, mask, outputFolder, 256, ...
